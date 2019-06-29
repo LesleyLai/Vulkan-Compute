@@ -6,6 +6,7 @@
 
 #include <array>
 #include <optional>
+#include <random>
 #include <set>
 #include <vector>
 
@@ -161,6 +162,31 @@ auto get_compute_queue_index(const vk::PhysicalDevice& pd)
   return std::nullopt;
 }
 
+auto vk_malloc(const vk::PhysicalDevice& pd, const vk::Device& device,
+               VkDeviceSize memory_size)
+{
+  uint32_t memory_type_index = VK_MAX_MEMORY_TYPES;
+  const auto properties = pd.getMemoryProperties();
+  for (uint32_t i = 0; i < properties.memoryTypeCount; ++i) {
+    const auto memory_type = properties.memoryTypes[i];
+
+    if ((memory_type.propertyFlags &
+         vk::MemoryPropertyFlagBits::eHostVisible) &&
+        (memory_type.propertyFlags &
+         vk::MemoryPropertyFlagBits::eHostCoherent) &&
+        memory_size < properties.memoryHeaps[memory_type.heapIndex].size) {
+      memory_type_index = i;
+      break;
+    }
+  }
+  if (memory_type_index == VK_MAX_MEMORY_TYPES) {
+    throw std::runtime_error("GPU out of memory");
+  }
+
+  const vk::MemoryAllocateInfo malloc_info{memory_size, memory_type_index};
+  return device.allocateMemoryUnique(malloc_info);
+}
+
 int main() try {
   const auto instance = create_instance();
   [[maybe_unused]] const auto dldy = create_dynamic_loader(*instance);
@@ -170,15 +196,46 @@ int main() try {
 #endif
 
   const auto pd = pick_physical_device(*instance).value();
-  const auto compute_queue_index = get_compute_queue_index(pd).value();
+  const auto compute_queue_family_index = get_compute_queue_index(pd).value();
 
   float queue_priorities = 1;
   const vk::DeviceQueueCreateInfo queue_create_info{
-      {}, compute_queue_index, 1, &queue_priorities};
+      {}, compute_queue_family_index, 1, &queue_priorities};
   const vk::DeviceCreateInfo create_info{{}, 1, &queue_create_info};
 
   const auto device = pd.createDeviceUnique(create_info);
-  const auto compute_queue = device->getQueue(compute_queue_index, 0);
+  const auto compute_queue = device->getQueue(compute_queue_family_index, 0);
+
+  constexpr uint32_t buffer_size = sizeof(int32_t) * (2 << 13);
+  constexpr VkDeviceSize memory_size = buffer_size * 2;
+
+  auto memory = vk_malloc(pd, *device, memory_size);
+
+  std::random_device rd;
+  auto* payload = static_cast<int*>(device->mapMemory(*memory, 0, memory_size));
+  for (uint32_t k = 0; k < memory_size / sizeof(int32_t); ++k) {
+    std::uniform_int_distribution<int> dis;
+    payload[k] = dis(rd);
+  }
+  device->unmapMemory(*memory);
+
+  vk::BufferCreateInfo buffer_create_info{
+      {},
+      buffer_size,
+      vk::BufferUsageFlagBits::eStorageBuffer,
+      vk::SharingMode::eExclusive,
+      1,
+      &compute_queue_family_index};
+
+  const auto in_buffer = device->createBufferUnique(buffer_create_info);
+  const auto in_memory_requirement =
+      device->getBufferMemoryRequirements(*in_buffer);
+  device->bindBufferMemory(*in_buffer, *memory, 0);
+
+  const auto out_buffer = device->createBufferUnique(buffer_create_info);
+  const auto out_memory_requirement =
+      device->getBufferMemoryRequirements(*out_buffer);
+  device->bindBufferMemory(*out_buffer, *memory, buffer_size);
 
 } catch (const std::exception& e) {
   fmt::print(stderr, "Error: {}\n", e.what());
