@@ -206,6 +206,7 @@ int main() try {
   const auto device = pd.createDeviceUnique(create_info);
   const auto compute_queue = device->getQueue(compute_queue_family_index, 0);
 
+  // Create buffers
   constexpr uint32_t buffer_size = sizeof(int32_t) * (2 << 13);
   constexpr VkDeviceSize memory_size = buffer_size * 2;
 
@@ -236,6 +237,38 @@ int main() try {
   const auto out_memory_requirement =
       device->getBufferMemoryRequirements(*out_buffer);
   device->bindBufferMemory(*out_buffer, *memory, buffer_size);
+
+  // Create Shader
+  const auto shader_module =
+      create_shader_module("shaders/copy.comp.spv", *device);
+
+  // Creates descriptor set layout
+  const vk::DescriptorSetLayoutBinding descriptor_set_layout_bindings[2] = {
+      {0, vk::DescriptorType::eStorageBuffer, 1,
+       vk::ShaderStageFlagBits::eCompute, nullptr},
+      {1, vk::DescriptorType::eStorageBuffer, 1,
+       vk::ShaderStageFlagBits::eCompute, nullptr}};
+
+  const vk::DescriptorSetLayoutCreateInfo descriptor_set_layout_create_info{
+      {}, 2, descriptor_set_layout_bindings};
+
+  const auto descriptor_set_layout = device->createDescriptorSetLayoutUnique(
+      descriptor_set_layout_create_info);
+
+  // Create compute pipeline
+  const vk::PipelineLayoutCreateInfo pipeline_layout_create_info{
+      {}, 1, &descriptor_set_layout.get()};
+  const auto pipeline_layout =
+      device->createPipelineLayoutUnique(pipeline_layout_create_info);
+
+  vk::PipelineShaderStageCreateInfo shader_stage_create_info{
+      {}, vk::ShaderStageFlagBits::eCompute, *shader_module, "main"};
+
+  vk::ComputePipelineCreateInfo pipeline_create_info{
+      {}, shader_stage_create_info, *pipeline_layout, {}, 0};
+
+  const auto pipeline =
+      device->createComputePipelineUnique({}, pipeline_create_info);
 
 } catch (const std::exception& e) {
   fmt::print(stderr, "Error: {}\n", e.what());

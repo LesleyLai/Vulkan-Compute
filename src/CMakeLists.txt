@@ -12,7 +12,7 @@ target_link_libraries(VulkanRenderer
 include(CompileShader)
 compile_shader(shader
    SOURCE ${CMAKE_SOURCE_DIR}/shaders/copy.comp
-   TARGET ${CMAKE_CURRENT_BINARY_DIR}/shaders/copy.comp.spv
+   TARGET ${CMAKE_BINARY_DIR}/bin/shaders/copy.comp.spv
 )
 
 set_target_properties(VulkanRenderer PROPERTIES RUNTIME_OUTPUT_DIRECTORY
