@@ -283,15 +283,26 @@ int main() try {
   const vk::DescriptorSetAllocateInfo descriptor_set_allocate_info{
       *descriptor_pool, 1, &descriptor_set_layout.get()};
 
-  const auto descriptor_set =
+  const auto descriptor_sets =
       device->allocateDescriptorSetsUnique(descriptor_set_allocate_info);
 
-  // Buffers
+  // Update the descriptor set to set the bindings of both of the VkBuffers
   const vk::DescriptorBufferInfo in_descriptor_buffer_info{*in_buffer, 0,
                                                            VK_WHOLE_SIZE};
 
   const vk::DescriptorBufferInfo out_descriptor_buffer_info{*out_buffer, 0,
                                                             VK_WHOLE_SIZE};
+
+  std::array write_descriptor_sets{
+      vk::WriteDescriptorSet{*descriptor_sets[0], 0, 0, 1,
+                             vk::DescriptorType::eStorageBuffer, nullptr,
+                             &in_descriptor_buffer_info, nullptr},
+      vk::WriteDescriptorSet{*descriptor_sets[0], 1, 0, 1,
+                             vk::DescriptorType::eStorageBuffer, nullptr,
+                             &out_descriptor_buffer_info, nullptr}};
+
+  device->updateDescriptorSets(write_descriptor_sets.size(),
+                               write_descriptor_sets.data(), 0, nullptr);
 
   // Command Pool
   const vk::CommandPoolCreateInfo command_pool_create_info{{}, 0};
