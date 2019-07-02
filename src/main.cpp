@@ -270,6 +270,43 @@ int main() try {
   const auto pipeline =
       device->createComputePipelineUnique({}, pipeline_create_info);
 
+  // Create descriptor pool
+  const vk::DescriptorPoolSize descriptor_pool_size{
+      vk::DescriptorType::eStorageBuffer, 2};
+  vk::DescriptorPoolCreateInfo descriptor_pool_create_info{
+      vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, 1, 1,
+      &descriptor_pool_size};
+  const auto descriptor_pool =
+      device->createDescriptorPoolUnique(descriptor_pool_create_info);
+
+  // Allocates descriptor set
+  const vk::DescriptorSetAllocateInfo descriptor_set_allocate_info{
+      *descriptor_pool, 1, &descriptor_set_layout.get()};
+
+  const auto descriptor_set =
+      device->allocateDescriptorSetsUnique(descriptor_set_allocate_info);
+
+  // Buffers
+  const vk::DescriptorBufferInfo in_descriptor_buffer_info{*in_buffer, 0,
+                                                           VK_WHOLE_SIZE};
+
+  const vk::DescriptorBufferInfo out_descriptor_buffer_info{*out_buffer, 0,
+                                                            VK_WHOLE_SIZE};
+
+  // Command Pool
+  const vk::CommandPoolCreateInfo command_pool_create_info{{}, 0};
+  const auto command_pool =
+      device->createCommandPoolUnique(command_pool_create_info);
+
+  // Test Success
+#if 0
+  payload = static_cast<int*>(device->mapMemory(*memory, 0, memory_size));
+  for (uint32_t k = 0, e = buffer_size / sizeof(int32_t); k < e; k++) {
+    assert(payload[k + e] == payload[k]);
+  }
+  device->unmapMemory(*memory);
+#endif
+
 } catch (const std::exception& e) {
   fmt::print(stderr, "Error: {}\n", e.what());
 } catch (...) {
