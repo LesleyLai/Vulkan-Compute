@@ -284,7 +284,7 @@ int main() try {
       *descriptor_pool, 1, &descriptor_set_layout.get()};
 
   const auto descriptor_sets =
-      device->allocateDescriptorSetsUnique(descriptor_set_allocate_info);
+      device->allocateDescriptorSets(descriptor_set_allocate_info);
 
   // Update the descriptor set to set the bindings of both of the VkBuffers
   const vk::DescriptorBufferInfo in_descriptor_buffer_info{*in_buffer, 0,
@@ -294,10 +294,10 @@ int main() try {
                                                             VK_WHOLE_SIZE};
 
   std::array write_descriptor_sets{
-      vk::WriteDescriptorSet{*descriptor_sets[0], 0, 0, 1,
+      vk::WriteDescriptorSet{descriptor_sets[0], 0, 0, 1,
                              vk::DescriptorType::eStorageBuffer, nullptr,
                              &in_descriptor_buffer_info, nullptr},
-      vk::WriteDescriptorSet{*descriptor_sets[0], 1, 0, 1,
+      vk::WriteDescriptorSet{descriptor_sets[0], 1, 0, 1,
                              vk::DescriptorType::eStorageBuffer, nullptr,
                              &out_descriptor_buffer_info, nullptr}};
 
@@ -309,14 +309,44 @@ int main() try {
   const auto command_pool =
       device->createCommandPoolUnique(command_pool_create_info);
 
+  // Allocate a command buffer from the command pool
+  const vk::CommandBufferAllocateInfo command_buffer_allocate_info{
+      *command_pool, vk::CommandBufferLevel::ePrimary, 1};
+  const auto command_buffers =
+      device->allocateCommandBuffers(command_buffer_allocate_info);
+
+  // Create command buffer
+  const vk::CommandBufferBeginInfo command_buffer_begin_info{
+      vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
+
+  command_buffers[0].begin(command_buffer_begin_info);
+  command_buffers[0].bindPipeline(vk::PipelineBindPoint::eCompute, *pipeline);
+  command_buffers[0].bindDescriptorSets(
+      vk::PipelineBindPoint::eCompute, *pipeline_layout, 0,
+      static_cast<std::uint32_t>(descriptor_sets.size()),
+      descriptor_sets.data(), 0, nullptr);
+  command_buffers[0].dispatch(buffer_size / sizeof(int32_t), 1, 1);
+  command_buffers[0].end();
+
+  // Submit the command buffer to a queue
+  vk::Queue queue = device->getQueue(compute_queue_family_index, 0);
+  const vk::SubmitInfo submit_info{
+      0,
+      nullptr,
+      nullptr,
+      static_cast<std::uint32_t>(command_buffers.size()),
+      command_buffers.data(),
+      0,
+      nullptr};
+  queue.submit(1, &submit_info, {});
+  queue.waitIdle();
+
   // Test Success
-#if 0
   payload = static_cast<int*>(device->mapMemory(*memory, 0, memory_size));
   for (uint32_t k = 0, e = buffer_size / sizeof(int32_t); k < e; k++) {
     assert(payload[k + e] == payload[k]);
   }
   device->unmapMemory(*memory);
-#endif
 
 } catch (const std::exception& e) {
   fmt::print(stderr, "Error: {}\n", e.what());
